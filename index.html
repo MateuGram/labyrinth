@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Лабиринт - найди выход</title>
+    <style>
+        * {
+            user-select: none;
+            touch-action: manipulation;
+        }
+        body {
+            background: #0a1f1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+        }
+        .game-container {
+            background: #2c2c2c;
+            padding: 10px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+        canvas {
+            display: block;
+            margin: 0 auto;
+            border-radius: 10px;
+            box-shadow: 0 0 0 3px #ffaa44;
+            background: #000;
+            cursor: pointer;
+        }
+        .info {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 12px;
+            color: #ffdd99;
+            font-weight: bold;
+            font-size: 1.1rem;
+            padding: 0 10px;
+        }
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        .direction-pad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            max-width: 200px;
+            margin: 0 auto;
+        }
+        button {
+            background: #ffaa44;
+            border: none;
+            font-size: 1.3rem;
+            font-weight: bold;
+            padding: 8px 12px;
+            border-radius: 40px;
+            min-width: 60px;
+            box-shadow: 0 3px 0 #a05e15;
+            transition: 0.05s linear;
+            touch-action: manipulation;
+            cursor: pointer;
+        }
+        button:active {
+            transform: translateY(2px);
+            box-shadow: 0 1px 0 #a05e15;
+        }
+        .restart {
+            background: #d64545;
+            color: white;
+            width: auto;
+            padding: 8px 18px;
+            font-size: 1rem;
+            margin-top: 5px;
+        }
+        @media (max-width: 600px) {
+            button { min-width: 55px; font-size: 1.1rem; }
+            .info { font-size: 0.9rem; }
+        }
+    </style>
+</head>
+<body>
+<div>
+    <div class="game-container">
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+        <div class="info">
+            <span>🚶 Шаги: <span id="stepsValue">0</span></span>
+            <span>⭐ Найди выход!</span>
+        </div>
+        <div class="controls">
+            <div class="direction-pad">
+                <div></div>
+                <button id="btnUp">▲ ВВЕРХ</button>
+                <div></div>
+                <button id="btnLeft">◀ ЛЕВО</button>
+                <button id="btnDown">▼ ВНИЗ</button>
+                <button id="btnRight">ПРАВО ▶</button>
+            </div>
+        </div>
+        <div style="text-align: center; margin-top: 10px;">
+            <button id="restartBtn" class="restart">🔄 Новая игра</button>
+        </div>
+        <div style="text-align: center; margin-top: 8px; font-size: 11px; color: #aaa;">
+            Стрелки или кнопки
+        </div>
+    </div>
+</div>
+
+<script>
+    (function(){
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const stepsSpan = document.getElementById('stepsValue');
+
+        const SIZE = 400;       // 400x400
+        const CELL_SIZE = 20;   // 20x20 пикселей => поле 20x20 клеток
+        const COLS = SIZE / CELL_SIZE; // 20
+        const ROWS = SIZE / CELL_SIZE; // 20
+
+        // Лабиринт (1 - стена, 0 - проход, 2 - выход)
+        // Создадим интересный лабиринт вручную (20x20)
+        // 0 - дорога, 1 - стена, 2 - цель (выход)
+        const rawMaze = [
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1],
+            [1,0,1,0,1,0,1,1,1,0,1,1,0,1,0,1,1,0,0,1],
+            [1,0,1,0,0,0,1,0,0,0,1,0,0,0,0,1,0,0,1,1],
+            [1,0,1,1,1,0,1,0,1,1,1,0,1,1,0,1,0,1,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+            [1,1,1,0,1,1,1,0,1,1,1,0,1,1,1,0,1,1,0,1],
+            [1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,1],
+            [1,0,1,1,1,0,1,1,1,0,1,1,1,0,1,1,1,0,0,1],
+            [1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1],
+            [1,0,1,0,1,1,1,0,1,1,1,1,1,1,0,0,1,0,0,1],
+            [1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,1,1,0,1,1,1,0,1,0,1,1,1,1,1,0,1,1,0,1],
+            [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,1,1,1,0,1,1,1,0,1,1,0,1,1,0,1,1,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,1,1,0,1,1,1,0,1,1,1,0,1,1,1,1,1,0,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,1], // цель в (18,17) в индексах (строка, столбец)
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ];
+
+        // Копируем лабиринт для изменения (цель динамически)
+        let maze = rawMaze.map(row => [...row]);
+        let player = { x: 1, y: 1 };   // старт в (1,1) - проход
+        let goal = { x: 18, y: 17 };    // где находится 2 в rawMaze (строка 18, столбец 17)
+        let steps = 0;
+        let gameWin = false;
+
+        function updateStepsDisplay() {
+            stepsSpan.innerText = steps;
+        }
+
+        // Проверка, можно ли двигаться
+        function tryMove(dx, dy) {
+            if (gameWin) return false;
+            const newX = player.x + dx;
+            const newY = player.y + dy;
+            if (newX < 0 || newX >= ROWS || newY < 0 || newY >= COLS) return false;
+            const cell = maze[newX][newY];
+            if (cell === 1) return false; // стена
+            // Движение разрешено
+            player.x = newX;
+            player.y = newY;
+            steps++;
+            updateStepsDisplay();
+            if (cell === 2) {
+                gameWin = true;
+            }
+            drawMaze();
+            return true;
+        }
+
+        // Отрисовка лабиринта
+        function drawMaze() {
+            ctx.clearRect(0, 0, SIZE, SIZE);
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    let cell = maze[row][col];
+                    let x = col * CELL_SIZE;
+                    let y = row * CELL_SIZE;
+                    if (cell === 1) {
+                        ctx.fillStyle = "#3a3a5a";
+                        ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+                        ctx.fillStyle = "#2a2a4a";
+                        ctx.fillRect(x+1, y+1, CELL_SIZE-2, CELL_SIZE-2);
+                    } else if (cell === 2) {
+                        ctx.fillStyle = "#44dd44";
+                        ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+                        ctx.fillStyle = "#aaffaa";
+                        ctx.font = `${CELL_SIZE-4}px monospace`;
+                        ctx.fillText("⭐", x+3, y+CELL_SIZE-4);
+                    } else {
+                        ctx.fillStyle = "#1a1a2a";
+                        ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+                        ctx.fillStyle = "#2a2a3a";
+                        ctx.fillRect(x+1, y+1, CELL_SIZE-2, CELL_SIZE-2);
+                    }
+                }
+            }
+            // Рисуем игрока (красный шарик)
+            const px = player.y * CELL_SIZE;
+            const py = player.x * CELL_SIZE;
+            ctx.fillStyle = "#ff4444";
+            ctx.beginPath();
+            ctx.arc(px + CELL_SIZE/2, py + CELL_SIZE/2, CELL_SIZE/2 - 2, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.arc(px + CELL_SIZE/2 - 2, py + CELL_SIZE/2 - 2, 3, 0, Math.PI*2);
+            ctx.fill();
+            
+            if (gameWin) {
+                ctx.font = "bold 24monospace";
+                ctx.fillStyle = "#ffdd77";
+                ctx.shadowBlur = 0;
+                ctx.fillText("ПОБЕДА!", SIZE/2-70, SIZE/2-30);
+                ctx.font = "16monospace";
+                ctx.fillStyle = "#bbffbb";
+                ctx.fillText("Нажми «Новая игра»", SIZE/2-85, SIZE/2+20);
+            }
+        }
+
+        function restartGame() {
+            // Сброс лабиринта
+            maze = rawMaze.map(row => [...row]);
+            player = { x: 1, y: 1 };
+            steps = 0;
+            gameWin = false;
+            updateStepsDisplay();
+            drawMaze();
+        }
+
+        // Управление
+        function moveUp() { tryMove(-1, 0); }
+        function moveDown() { tryMove(1, 0); }
+        function moveLeft() { tryMove(0, -1); }
+        function moveRight() { tryMove(0, 1); }
+
+        // Обработчики кнопок
+        document.getElementById('btnUp').addEventListener('click', (e) => { e.preventDefault(); moveUp(); });
+        document.getElementById('btnDown').addEventListener('click', (e) => { e.preventDefault(); moveDown(); });
+        document.getElementById('btnLeft').addEventListener('click', (e) => { e.preventDefault(); moveLeft(); });
+        document.getElementById('btnRight').addEventListener('click', (e) => { e.preventDefault(); moveRight(); });
+        document.getElementById('restartBtn').addEventListener('click', () => { restartGame(); });
+
+        // Стрелки клавиатуры
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp') { e.preventDefault(); moveUp(); }
+            else if (e.key === 'ArrowDown') { e.preventDefault(); moveDown(); }
+            else if (e.key === 'ArrowLeft') { e.preventDefault(); moveLeft(); }
+            else if (e.key === 'ArrowRight') { e.preventDefault(); moveRight(); }
+        });
+
+        // Старт
+        drawMaze();
+    })();
+</script>
+</body>
+</html>
